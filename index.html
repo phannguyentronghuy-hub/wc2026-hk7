@@ -1427,53 +1427,121 @@ function renderDistributions(stats) {
     if (isMe) stackBars += `<rect x="${PL-2}" y="${y-2}" width="${barArea+4}" height="${BAR_H+4}" rx="5" fill="none" stroke="#ffca28" stroke-width="1" stroke-dasharray="3,2"/>`;
   });
 
-  // 4. Histogram of win rate distribution
-  const accPcts = stats.map(s => s.accuracy * 100);
-  const BIN_SIZE = 1, BIN_MIN = 30, BIN_MAX = 70;
-  const histBins = Array.from({length: (BIN_MAX-BIN_MIN)/BIN_SIZE + 1}, (_,i) => BIN_MIN + i*BIN_SIZE);
-  const histCounts = histBins.slice(0,-1).map((_,i) => {
-    const lo = histBins[i], hi = histBins[i+1];
-    return accPcts.filter(v => i===histBins.length-2 ? v>=lo&&v<=hi : v>=lo&&v<hi).length;
+  // 4. Score distribution histogram
+  const scores = stats.map(s => s.score);
+  const scoreMin = Math.floor(Math.min(...scores));
+  const scoreMax = Math.ceil(Math.max(...scores));
+  const SBIN = 2;
+  const sBinMin = Math.floor(scoreMin / SBIN) * SBIN;
+  const sBinMax = Math.ceil((scoreMax + 1) / SBIN) * SBIN;
+  const sBins = [];
+  for (let v = sBinMin; v < sBinMax; v += SBIN) sBins.push(v);
+  const sCounts = sBins.map((lo, i) => {
+    const hi = lo + SBIN;
+    return scores.filter(v => i === sBins.length - 1 ? v >= lo && v <= hi : v >= lo && v < hi).length;
   });
-  const histMax = Math.max(...histCounts, 1);
+  const sMax = Math.max(...sCounts, 1);
   const HIST_W = 520, HIST_H = 160, HPL = 35, HPR = 10, HPT = 10, HPB = 30;
   const histBarArea = HIST_W - HPL - HPR;
   const histGap = 1;
-  const histBarW = (histBarArea - histGap * histCounts.length) / histCounts.length;
+  const histBarW = Math.max(6, (histBarArea - histGap * sCounts.length) / sCounts.length);
   const histChartH = HIST_H - HPT - HPB;
-  const myAcc = ME ? (stats.find(s=>s.pl.id===ME.id)?.accuracy||0)*100 : -1;
+  const myScore = ME ? (stats.find(s => s.pl.id === ME.id)?.score ?? -999) : -999;
 
   let histSvg = '';
-  // Y axis lines
-  for (let i=0;i<=histMax;i++) {
-    const y = HPT + histChartH - (i/histMax)*histChartH;
+  for (let i = 0; i <= sMax; i++) {
+    const y = HPT + histChartH - (i / sMax) * histChartH;
     histSvg += `<line x1="${HPL}" x2="${HIST_W-HPR}" y1="${y}" y2="${y}" stroke="rgba(0,0,0,.04)" stroke-width="0.5"/>`;
     histSvg += `<text x="${HPL-6}" y="${y+3}" text-anchor="end" fill="rgba(0,0,0,.25)" font-size="9" font-family="Montserrat,sans-serif">${i}</text>`;
   }
-  // Bars
-  histCounts.forEach((c,i) => {
+  sCounts.forEach((c, i) => {
     const x = HPL + i * (histBarW + histGap);
-    const bh = (c/histMax) * histChartH;
+    const bh = (c / sMax) * histChartH;
     const y = HPT + histChartH - bh;
-    const lo = histBins[i], hi = histBins[i+1];
-    const isMeBin = myAcc >= lo && (i===histCounts.length-1 ? myAcc<=hi : myAcc<hi);
-    const color = isMeBin ? '#ffca28' : lo>=50 ? '#26d97f' : lo>=30 ? '#ffa726' : '#ff5c7a';
-    histSvg += `<rect x="${x}" y="${y}" width="${histBarW}" height="${bh}" rx="3" fill="${color}" opacity="${isMeBin?'1':'.6'}"/>`;
+    const lo = sBins[i], hi = lo + SBIN;
+    const isMeBin = myScore >= lo && (i === sCounts.length - 1 ? myScore <= hi : myScore < hi);
+    const color = isMeBin ? '#ffca28' : '#1b9e5a';
+    histSvg += `<rect x="${x}" y="${y}" width="${histBarW}" height="${bh}" rx="3" fill="${color}" opacity="${isMeBin?'1':'.55'}"/>`;
     if (c > 0) histSvg += `<text x="${x+histBarW/2}" y="${y-4}" text-anchor="middle" fill="rgba(0,0,0,.7)" font-size="9" font-weight="700" font-family="Montserrat,sans-serif">${c}</text>`;
-    if (lo % 10 === 0) histSvg += `<text x="${x}" y="${HIST_H-6}" text-anchor="middle" fill="rgba(0,0,0,.35)" font-size="8" font-family="Montserrat,sans-serif">${lo}%</text>`;
+    if (lo % 10 === 0 || i === 0) histSvg += `<text x="${x}" y="${HIST_H-6}" text-anchor="middle" fill="rgba(0,0,0,.35)" font-size="8" font-family="Montserrat,sans-serif">${lo}</text>`;
   });
-  // Mean line
-  const meanAcc = accPcts.reduce((a,b)=>a+b,0)/accPcts.length;
-  const meanX = HPL + ((meanAcc/100) * histBarArea);
-  histSvg += `<line x1="${meanX}" x2="${meanX}" y1="${HPT}" y2="${HPT+histChartH}" stroke="#4ac3ff" stroke-width="1.5" stroke-dasharray="4,3"/>`;
-  histSvg += `<text x="${meanX}" y="${HPT-2}" text-anchor="middle" fill="#4ac3ff" font-size="8" font-weight="700" font-family="Montserrat,sans-serif">TB ${meanAcc.toFixed(1)}%</text>`;
+  const meanScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+  const meanX = HPL + ((meanScore - sBinMin) / (sBinMax - sBinMin)) * histBarArea;
+  histSvg += `<line x1="${meanX}" x2="${meanX}" y1="${HPT}" y2="${HPT+histChartH}" stroke="#1976d2" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+  histSvg += `<text x="${meanX}" y="${HPT-2}" text-anchor="middle" fill="#1976d2" font-size="8" font-weight="700" font-family="Montserrat,sans-serif">TB ${meanScore.toFixed(1)}</text>`;
+
+  // 5. Stage breakdown: max points per stage + each player's points per stage
+  const STAGE_ORDER = ['group','r32','r16','qf','sf','final'];
+  const STAGE_LABELS = {group:'Vòng bảng',r32:'Vòng 32',r16:'Vòng 16',qf:'Tứ kết',sf:'Bán kết',final:'Chung kết'};
+  const STAGE_COLORS = {group:'#1b9e5a',r32:'#1976d2',r16:'#7e57c2',qf:'#ef6c00',sf:'#e91e63',final:'#f9a825'};
+  const scoredMatches = S.matches.filter(m => m.result != null);
+  const stageMax = {};
+  STAGE_ORDER.forEach(st => { stageMax[st] = scoredMatches.filter(m => m.stage === st).reduce((s, m) => s + (STAGE_WEIGHT[m.stage] || 1), 0); });
+  const activeStages = STAGE_ORDER.filter(st => stageMax[st] > 0);
+  const totalMax2 = activeStages.reduce((s, st) => s + stageMax[st], 0);
+
+  const playerStageScores = stats.map(s => {
+    const byStage = {};
+    activeStages.forEach(st => { byStage[st] = 0; });
+    scoredMatches.forEach(m => {
+      const key = `${m.id}_${s.pl.id}`;
+      const pick = S.predictions[key];
+      if (pick) byStage[m.stage] = (byStage[m.stage] || 0) + calcScore(pick, m.result, m.stage, !!S.doubleDowns[key]);
+    });
+    return { pl: s.pl, byStage, total: Object.values(byStage).reduce((a, b) => a + b, 0) };
+  }).sort((a, b) => b.total - a.total);
+
+  const SBW = 520, SBH_ROW = 22, SBG = 4, SBPL = 80, SBPR = 50, SBPT = 30, SBPB = 10;
+  const sbRows = playerStageScores.length + 1;
+  const SBH = SBPT + sbRows * (SBH_ROW + SBG) + SBPB;
+  const sbBarArea = SBW - SBPL - SBPR;
+  const sbScale = totalMax2 > 0 ? sbBarArea / totalMax2 : 1;
+
+  let sbSvg = '';
+  // Header: max bar
+  let xOff = SBPL;
+  activeStages.forEach(st => {
+    const w = stageMax[st] * sbScale;
+    sbSvg += `<rect x="${xOff}" y="${SBPT}" width="${w}" height="${SBH_ROW}" rx="3" fill="${STAGE_COLORS[st]}" opacity=".25"/>`;
+    if (w > 25) sbSvg += `<text x="${xOff+w/2}" y="${SBPT+SBH_ROW/2+4}" text-anchor="middle" fill="${STAGE_COLORS[st]}" font-size="8" font-weight="700" font-family="Montserrat,sans-serif">${stageMax[st]}</text>`;
+    xOff += w;
+  });
+  sbSvg += `<text x="${SBPL-6}" y="${SBPT+SBH_ROW/2+4}" text-anchor="end" fill="rgba(0,0,0,.5)" font-size="9" font-weight="800" font-family="Montserrat,sans-serif">Tối đa</text>`;
+  sbSvg += `<text x="${xOff+6}" y="${SBPT+SBH_ROW/2+4}" fill="rgba(0,0,0,.6)" font-size="9" font-weight="700" font-family="Montserrat,sans-serif">${totalMax2}</text>`;
+
+  // Player rows
+  playerStageScores.forEach((ps, i) => {
+    const ry = SBPT + (i + 1) * (SBH_ROW + SBG);
+    const isMe = ME?.id === ps.pl.id;
+    sbSvg += `<text x="${SBPL-6}" y="${ry+SBH_ROW/2+4}" text-anchor="end" fill="${isMe?'#e91e63':'rgba(0,0,0,.6)'}" font-size="9" font-weight="${isMe?'800':'600'}" font-family="Montserrat,sans-serif">${ps.pl.short}</text>`;
+    let px = SBPL;
+    activeStages.forEach(st => {
+      const maxW = stageMax[st] * sbScale;
+      const val = Math.max(ps.byStage[st], 0);
+      const w = val * sbScale;
+      sbSvg += `<rect x="${px}" y="${ry}" width="${maxW}" height="${SBH_ROW}" rx="3" fill="rgba(0,0,0,.04)"/>`;
+      if (w > 0) sbSvg += `<rect x="${px}" y="${ry}" width="${w}" height="${SBH_ROW}" rx="3" fill="${STAGE_COLORS[st]}" opacity="${isMe?'1':'.7'}"/>`;
+      px += maxW;
+    });
+    sbSvg += `<text x="${px+6}" y="${ry+SBH_ROW/2+4}" fill="rgba(0,0,0,.6)" font-size="9" font-weight="700" font-family="Montserrat,sans-serif">${ps.total}</text>`;
+    if (isMe) sbSvg += `<rect x="${SBPL-2}" y="${ry-2}" width="${sbBarArea+4}" height="${SBH_ROW+4}" rx="5" fill="none" stroke="#e91e63" stroke-width="1" stroke-dasharray="3,2"/>`;
+  });
+
+  // Stage legend
+  const sbLegend = activeStages.map(st => `<span style="font-size:.6rem;font-weight:700;display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:2px;background:${STAGE_COLORS[st]};display:inline-block"></span>${STAGE_LABELS[st]} (${stageMax[st]}đ)</span>`).join('');
 
   let h = `<div class="section-title">📊 Phân phối điểm số</div>`;
 
   h += `<div class="card" style="overflow-x:auto">
-    <div style="font-size:.72rem;font-weight:800;color:var(--muted);letter-spacing:1px;margin-bottom:4px;text-transform:uppercase">📈 Phân phối % chuẩn xác (histogram)</div>
-    <div style="font-size:.6rem;color:var(--muted);margin-bottom:8px">Số người chơi trong từng khoảng % · đường xanh = trung bình${myAcc>=0?` · cột vàng = bạn (${myAcc.toFixed(1)}%)`:''}</div>
+    <div style="font-size:.72rem;font-weight:800;color:var(--muted);letter-spacing:1px;margin-bottom:4px;text-transform:uppercase">📈 Phân phối điểm số (histogram)</div>
+    <div style="font-size:.6rem;color:var(--muted);margin-bottom:8px">Số người trong từng khoảng điểm · đường xanh = trung bình${myScore>-999?` · cột vàng = bạn (${myScore}đ)`:''}</div>
     <svg viewBox="0 0 ${HIST_W} ${HIST_H}" width="100%" style="display:block">${histSvg}</svg>
+  </div>`;
+
+  h += `<div class="card" style="overflow-x:auto">
+    <div style="font-size:.72rem;font-weight:800;color:var(--muted);letter-spacing:1px;margin-bottom:4px;text-transform:uppercase">🏆 Điểm theo từng chặng</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">${sbLegend}</div>
+    <svg viewBox="0 0 ${SBW} ${SBH}" width="100%" style="display:block">${sbSvg}</svg>
   </div>`;
 
   h += `<div class="card" style="overflow-x:auto">
