@@ -1090,18 +1090,11 @@ function getMaxStake(pid) {
   return Math.max(1, Math.floor(total * 0.2));
 }
 function showStakeInput(matchId, maxStake) {
-  const card = document.getElementById('m-' + matchId);
-  if (!card) return;
-  const existing = card.querySelector('.stake-input-wrap');
-  if (existing) { existing.remove(); return; }
-  const wrap = document.createElement('div');
-  wrap.className = 'stake-input-wrap';
-  wrap.style.cssText = 'margin-top:8px;display:flex;align-items:center;gap:8px;justify-content:center';
-  wrap.innerHTML = `<input type="range" min="1" max="${maxStake}" value="${Math.min(maxStake, Math.max(1, Math.round(maxStake/2)))}" style="flex:1;max-width:140px;accent-color:var(--gold)" oninput="this.nextElementSibling.textContent=this.value" id="stake-slider-${matchId}">
-    <span style="font-weight:800;color:var(--gold);min-width:24px;text-align:center">${Math.min(maxStake, Math.max(1, Math.round(maxStake/2)))}</span>
-    <button class="dd-btn" onclick="submitStake('${matchId}',+document.getElementById('stake-slider-${matchId}').value)" style="padding:6px 14px">✓ Stake</button>`;
-  const btnRow = card.querySelector('.social-proof');
-  if (btnRow) card.insertBefore(wrap, btnRow); else card.appendChild(wrap);
+  const val = prompt(`Nhập số điểm stake (1 – ${maxStake}):`);
+  if (val === null) return;
+  const amount = parseInt(val);
+  if (isNaN(amount) || amount < 1 || amount > maxStake) { toast(`⚠️ Stake phải từ 1 đến ${maxStake}`); return; }
+  submitStake(matchId, amount);
 }
 async function submitStake(matchId, amount) {
   if (!ME) return;
