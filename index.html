@@ -501,7 +501,7 @@ let MY_PIN = localStorage.getItem(LS.pin)||'';
 // ═══════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════
-let S = { players:[], matches:[], predictions:{}, doubleDowns:{}, config:{groups:[]} };
+let S = { players:[], matches:[], predictions:{}, stakes:{}, config:{groups:[]} };
 const STAGE_WEIGHT = { group:1, r32:2, r16:3, qf:3, sf:3, final:3 };
 const STAGE_LABEL = { group:'Group Stage', r32:'Round of 32', r16:'Round of 16', qf:'Quarter Final', sf:'Semi Final', final:'Final' };
 const STAGE_SHORT = { group:'Group', r32:'R32', r16:'R16', qf:'QF', sf:'SF', final:'Final' };
@@ -538,7 +538,7 @@ async function api(payload) {
 async function refresh() {
   const d = await api({action:'getAll'});
   if (d) {
-    d.doubleDowns = d.doubleDowns || {};
+    d.stakes = d.stakes || {};
     S = d;
     if (ME) { const p = S.players.find(x=>x.id===ME.id); if (p) ME = {...p}; localStorage.setItem(LS.me,JSON.stringify(ME)); }
     updateUserAvatar();
@@ -610,7 +610,7 @@ async function initSheets() {
 // ═══════════════════════════════════════════════════════════
 // CALC
 // ═══════════════════════════════════════════════════════════
-function calcScore(pick, result, stage, isDD) {
+function calcScore(pick, result, stage, stake) {
   const w = STAGE_WEIGHT[stage]||1;
   const isDraw = result === 0;
   let base;
@@ -623,11 +623,11 @@ function calcScore(pick, result, stage, isDD) {
     else if (result===0||result===0.5) base = w*0.5;
     else base = 0;
   }
-  if (!isDD) return base;
-  if (base === w) return w * 2;
-  if (isDraw) return w * 0.5;
-  if (base > 0) return 0;
-  return -w;
+  if (!stake) return base;
+  if (base === w) return w + stake;
+  if (isDraw) return w * 0.5 + stake * 0.5;
+  if (base > 0) return w * 0.5 - stake * 0.5;
+  return -stake;
 }
 function playerStats(pid) {
   const pl = S.players.find(p=>p.id===pid);
@@ -642,9 +642,9 @@ function playerStats(pid) {
     if (m.result==null) return;
     played++;
     const w = STAGE_WEIGHT[m.stage]||1;
-    const isDD = !!S.doubleDowns[key];
-    maxScore += isDD ? w*2 : w;
-    const s = calcScore(pick, m.result, m.stage, isDD);
+    const stake = S.stakes[key] || 0;
+    maxScore += stake ? w + stake : w;
+    const s = calcScore(pick, m.result, m.stage, stake);
     score += s;
     if (s>=w) fullWin++; else if (s>0) halfWin++; else miss++;
   });
@@ -967,14 +967,14 @@ function matchCardHtml(m) {
   const canPick = !!ME && !locked;
   let b1='pick-btn', b2='pick-btn', resTag='';
   const myKey = ME ? `${m.id}_${ME.id}` : '';
-  const myDD = ME ? !!S.doubleDowns[myKey] : false;
+  const myStake = ME ? (S.stakes[myKey] || 0) : 0;
   if (myPick) {
     if (myPick===1) b1+=' active'; else b2+=' active';
     if (hasResult) {
-      const s = calcScore(myPick, m.result, m.stage, myDD);
+      const s = calcScore(myPick, m.result, m.stage, myStake);
       const w = STAGE_WEIGHT[m.stage]||1;
-      const ddLabel = myDD ? ' ⚡x2' : '';
-      const [cls,txt] = s>=w?['win',`✓ +${s} ĐIỂM${ddLabel}`]:s>0?['half',`½ +${s} ĐIỂM${ddLabel}`]:s<0?['lose',`✗ ${s} ĐIỂM${ddLabel}`]:['lose',`✗ 0 ĐIỂM${ddLabel}`];
+      const stakeLabel = myStake ? ` ⚡${myStake}` : '';
+      const [cls,txt] = s>=w?['win',`✓ +${s} ĐIỂM${stakeLabel}`]:s>0?['half',`½ +${s} ĐIỂM${stakeLabel}`]:s<0?['lose',`✗ ${s} ĐIỂM${stakeLabel}`]:['lose',`✗ 0 ĐIỂM${stakeLabel}`];
       resTag = `<div class="tc"><span class="result-tag ${cls}">${txt}</span></div>`;
       const rcls = s>=w?'correct':s>0?'half-correct':'wrong';
       if (myPick===1) b1=b1.replace('active','')+' '+rcls;
@@ -1016,12 +1016,14 @@ function matchCardHtml(m) {
     </div>
     ${(()=>{
       if (!myPick || !ME) return '';
-      if (myDD && !canPick) return `<div class="tc" style="margin-top:6px"><span class="dd-badge">⚡ X2</span></div>`;
+      if (myStake && !canPick) return `<div class="tc" style="margin-top:6px"><span class="dd-badge">⚡ Stake ${myStake}</span></div>`;
       if (!canPick) return '';
       const usedOn = ddUsedOnDate(ME.id, m.date, m.time, m.id);
-      if (myDD) return `<div class="tc" style="margin-top:6px"><button class="dd-btn dd-active" onclick="toggleDD('${m.id}')">⚡ X2 ĐÃ BẬT</button></div>`;
-      if (usedOn) return `<div class="tc" style="margin-top:6px"><button class="dd-btn" disabled style="opacity:.4;cursor:not-allowed">⚡ Đã dùng x2 trận #${usedOn.no||'?'} hôm nay</button></div>`;
-      return `<div class="tc" style="margin-top:6px"><button class="dd-btn" onclick="toggleDD('${m.id}')">⚡ X2 LIỀU ĂN NHIỀU</button></div>`;
+      if (myStake) return `<div class="tc" style="margin-top:6px"><button class="dd-btn dd-active" onclick="removeStake('${m.id}')">⚡ Stake ${myStake} · Bỏ</button></div>`;
+      const maxStake = getMaxStake(ME.id);
+      if (maxStake < 1) return `<div class="tc" style="margin-top:6px"><button class="dd-btn" disabled style="opacity:.4;cursor:not-allowed">⚡ Không đủ điểm để stake</button></div>`;
+      if (usedOn) return `<div class="tc" style="margin-top:6px"><button class="dd-btn" disabled style="opacity:.4;cursor:not-allowed">⚡ Đã stake trận #${usedOn.no||'?'} hôm nay</button></div>`;
+      return `<div class="tc" style="margin-top:6px"><button class="dd-btn" onclick="showStakeInput('${m.id}',${maxStake})">⚡ STAKE (max ${maxStake})</button></div>`;
     })()}
     <div class="social-proof">
       ${(locked || hasResult)
@@ -1067,12 +1069,41 @@ function ddUsedOnDate(pid, matchDate, matchTime, excludeMatchId) {
   const day = ddDay(matchDate, matchTime);
   return S.matches.find(m => {
     if (m.id === excludeMatchId) return false;
-    if (!S.doubleDowns[`${m.id}_${pid}`]) return false;
+    if (!S.stakes[`${m.id}_${pid}`]) return false;
     return ddDay(m.date, m.time) === day;
   });
 }
 
-async function toggleDD(matchId) {
+function getPlayerTotal(pid) {
+  let total = 0;
+  S.matches.forEach(m => {
+    if (m.result == null) return;
+    const pick = S.predictions[`${m.id}_${pid}`];
+    if (!pick) return;
+    total += calcScore(pick, m.result, m.stage, S.stakes[`${m.id}_${pid}`] || 0);
+  });
+  return total;
+}
+function getMaxStake(pid) {
+  const total = getPlayerTotal(pid);
+  if (total <= 0) return 0;
+  return Math.max(1, Math.floor(total * 0.2));
+}
+function showStakeInput(matchId, maxStake) {
+  const card = document.getElementById('m-' + matchId);
+  if (!card) return;
+  const existing = card.querySelector('.stake-input-wrap');
+  if (existing) { existing.remove(); return; }
+  const wrap = document.createElement('div');
+  wrap.className = 'stake-input-wrap';
+  wrap.style.cssText = 'margin-top:8px;display:flex;align-items:center;gap:8px;justify-content:center';
+  wrap.innerHTML = `<input type="range" min="1" max="${maxStake}" value="${Math.min(maxStake, Math.max(1, Math.round(maxStake/2)))}" style="flex:1;max-width:140px;accent-color:var(--gold)" oninput="this.nextElementSibling.textContent=this.value" id="stake-slider-${matchId}">
+    <span style="font-weight:800;color:var(--gold);min-width:24px;text-align:center">${Math.min(maxStake, Math.max(1, Math.round(maxStake/2)))}</span>
+    <button class="dd-btn" onclick="submitStake('${matchId}',+document.getElementById('stake-slider-${matchId}').value)" style="padding:6px 14px">✓ Stake</button>`;
+  const btnRow = card.querySelector('.social-proof');
+  if (btnRow) card.insertBefore(wrap, btnRow); else card.appendChild(wrap);
+}
+async function submitStake(matchId, amount) {
   if (!ME) return;
   const key = `${matchId}_${ME.id}`;
   if (!S.predictions[key]) { toast('⚠️ Chọn đội trước!'); return; }
@@ -1080,17 +1111,31 @@ async function toggleDD(matchId) {
   if (!m || isLocked(m)) { toast('🔒 Đã khoá'); return; }
   if (ME.hasPin && !MY_PIN) {
     const pin = prompt('Nhập PIN của bạn:'); if (!pin) return;
-    MY_PIN = pin; localStorage.setItem(LS.pin,pin);
+    MY_PIN = pin; localStorage.setItem(LS.pin, pin);
   }
-  const newDD = !S.doubleDowns[key];
-  if (newDD) {
-    const usedOn = ddUsedOnDate(ME.id, m.date, m.time, matchId);
-    if (usedOn) { toast(`⚡ Đã dùng x2 cho trận #${usedOn.no||'?'} ngày này`); return; }
-  }
-  if (newDD) S.doubleDowns[key] = true; else delete S.doubleDowns[key];
+  const usedOn = ddUsedOnDate(ME.id, m.date, m.time, matchId);
+  if (usedOn) { toast(`⚡ Đã stake trận #${usedOn.no||'?'} ngày này`); return; }
+  const maxStake = getMaxStake(ME.id);
+  if (amount < 1 || amount > maxStake) { toast(`⚠️ Stake phải từ 1 đến ${maxStake}`); return; }
+  S.stakes[key] = amount;
   renderCurrent();
-  const r = await api({action:'setDD', matchId, playerId:ME.id, dd:newDD?1:0, pin:MY_PIN});
-  if (r?.ok) toast(newDD?'⚡ X2 đã bật!':'⚡ X2 đã tắt');
+  const r = await api({action:'setStake', matchId, playerId:ME.id, stake:amount, pin:MY_PIN});
+  if (r?.ok) toast(`⚡ Stake ${amount} điểm!`);
+  else { toast(r?.error||'Lỗi'); refresh(); }
+}
+async function removeStake(matchId) {
+  if (!ME) return;
+  const key = `${matchId}_${ME.id}`;
+  const m = S.matches.find(x=>x.id===matchId);
+  if (!m || isLocked(m)) { toast('🔒 Đã khoá'); return; }
+  if (ME.hasPin && !MY_PIN) {
+    const pin = prompt('Nhập PIN của bạn:'); if (!pin) return;
+    MY_PIN = pin; localStorage.setItem(LS.pin, pin);
+  }
+  delete S.stakes[key];
+  renderCurrent();
+  const r = await api({action:'setStake', matchId, playerId:ME.id, stake:0, pin:MY_PIN});
+  if (r?.ok) toast('⚡ Đã bỏ stake');
   else { toast(r?.error||'Lỗi'); refresh(); }
 }
 
@@ -1109,12 +1154,12 @@ function showMatchDetail(matchId) {
   const myPickHere = ME ? S.predictions[`${m.id}_${ME.id}`] : null;
   const chip = (p,side)=>{
     let cls = side===1?'t1':side===2?'t2':'none';
-    const pdd = !!S.doubleDowns[`${m.id}_${p.id}`];
-    let extra = pdd ? ' ⚡' : '';
+    const pStake = S.stakes[`${m.id}_${p.id}`] || 0;
+    let extra = pStake ? ` ⚡${pStake}` : '';
     if (hasR && side>0) {
-      const s = calcScore(side, m.result, m.stage, pdd);
+      const s = calcScore(side, m.result, m.stage, pStake);
       const w = STAGE_WEIGHT[m.stage]||1;
-      extra = (s>=w?' ✓':s>0?' ½':' ✗') + (pdd?' ⚡':'');
+      extra = (s>=w?' ✓':s>0?' ½':' ✗') + (pStake?` ⚡${pStake}`:'');
     }
     return `<span class="player-chip ${cls}">${avatarHtml(p.short,'xs')}${p.short}${extra}</span>`;
   };
@@ -1486,7 +1531,7 @@ function renderDistributions(stats) {
     scoredMatches.forEach(m => {
       const key = `${m.id}_${s.pl.id}`;
       const pick = S.predictions[key];
-      if (pick) byStage[m.stage] = (byStage[m.stage] || 0) + calcScore(pick, m.result, m.stage, !!S.doubleDowns[key]);
+      if (pick) byStage[m.stage] = (byStage[m.stage] || 0) + calcScore(pick, m.result, m.stage, (S.stakes[key]||0));
     });
     return { pl: s.pl, byStage, total: Object.values(byStage).reduce((a, b) => a + b, 0) };
   }).sort((a, b) => b.total - a.total);
@@ -1593,7 +1638,7 @@ function renderWLChart() {
       const key = `${m.id}_${pid}`;
       const pick = S.predictions[key];
       if (!pick) return { m, type: 'skip', pts: 0 };
-      const s = calcScore(pick, m.result, m.stage, !!S.doubleDowns[key]);
+      const s = calcScore(pick, m.result, m.stage, (S.stakes[key]||0));
       const type = s > 0 ? (s >= (STAGE_WEIGHT[m.stage]||1) ? 'win' : 'half') : s < 0 ? 'loss' : 'zero';
       return { m, type, pts: s };
     });
@@ -1701,7 +1746,7 @@ function buildProgData() {
       const key = `${m.id}_${p.id}`;
       const pick = S.predictions[key];
       if (pick) {
-        runningScores[p.id] += calcScore(pick, m.result, m.stage, !!S.doubleDowns[key]);
+        runningScores[p.id] += calcScore(pick, m.result, m.stage, (S.stakes[key]||0));
       }
       cumScores[p.id].push(runningScores[p.id]);
     });
@@ -1837,7 +1882,7 @@ function calcStreaks(pid) {
       const sKey = `${m.id}_${pid}`;
       const pick = S.predictions[sKey];
       const w = STAGE_WEIGHT[m.stage] || 1;
-      const s = calcScore(pick, m.result, m.stage, !!S.doubleDowns[sKey]);
+      const s = calcScore(pick, m.result, m.stage, (S.stakes[sKey]||0));
       return { m, ms, pick, pts: s, isWin: s >= w, isHalf: s > 0 && s < w, isMiss: s <= 0 };
     })
     .sort((a, b) => a.ms - b.ms);
@@ -1977,7 +2022,7 @@ function renderResults() {
     if (resFilterStage && m.stage !== resFilterStage) return;
     const key = `${m.id}_${pid}`;
     const pick = S.predictions[key];
-    const isDD = !!S.doubleDowns[key];
+    const stake = S.stakes[key] || 0;
     const w = STAGE_WEIGHT[m.stage] || 1;
     const hasScore = m.score1 != null && m.score2 != null;
     const scoreText = hasScore ? `${m.score1} - ${m.score2}` : '';
@@ -1985,11 +2030,11 @@ function renderResults() {
 
     let pts = '-', ptsCls = 'txt-muted', ptsVal = 0;
     if (pick) {
-      ptsVal = calcScore(pick, m.result, m.stage, isDD);
+      ptsVal = calcScore(pick, m.result, m.stage, stake);
       pts = (ptsVal >= 0 ? '+' : '') + ptsVal;
       ptsCls = ptsVal >= w ? 'pos' : ptsVal > 0 ? 'half' : ptsVal < 0 ? 'neg' : 'zero';
       totalPts += ptsVal;
-      totalMax += isDD ? w * 2 : w;
+      totalMax += stake ? w + stake : w;
       count++;
     }
 
@@ -2006,7 +2051,7 @@ function renderResults() {
       <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${t1cls}">${m.f1} ${m.t1}</span>
       <span style="font-weight:700;color:var(--gold);min-width:32px;text-align:center">${scoreText}</span>
       <span style="flex:1;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${t2cls}">${m.t2} ${m.f2}</span>
-      <span style="min-width:50px;text-align:right;color:var(--muted);font-size:.65rem">${pickText}${isDD?'<span style="color:#e91e63;text-shadow:0 0 4px rgba(233,30,99,.4);font-size:.8rem"> ⚡</span>':''}</span>
+      <span style="min-width:50px;text-align:right;color:var(--muted);font-size:.65rem">${pickText}${stake?'<span style="color:#e91e63;text-shadow:0 0 4px rgba(233,30,99,.4);font-size:.7rem"> ⚡'+stake+'</span>':''}</span>
       <span class="${ptsCls}" style="min-width:28px;text-align:right;font-weight:800">${pts}</span>
     </div>`;
   });
@@ -2078,6 +2123,24 @@ function renderRules() {
       </tbody>
     </table>
     <p style="margin-top:10px"><b>Tỷ lệ chuẩn xác</b> = Điểm đạt được / Điểm tối đa có thể × 100%. Người dẫn đầu là người có % cao nhất hoặc điểm cao nhất.</p>
+  </div>
+
+  <div class="rule-block" style="border-color:rgba(255,193,7,.35);background:linear-gradient(135deg,rgba(255,193,7,.08),var(--surface))">
+    <h3 style="color:var(--gold)">⚡ Stake (Đặt cược điểm)</h3>
+    <p>Mỗi ngày (6pm → 6pm hôm sau, GMT+7), bạn có thể <b>stake</b> 1 trận:</p>
+    <table>
+      <thead><tr><th>Mục</th><th>Chi tiết</th></tr></thead>
+      <tbody>
+        <tr><td>Mức tối đa</td><td><b>20%</b> tổng điểm hiện tại (làm tròn xuống, tối thiểu 1)</td></tr>
+        <tr><td>Đúng</td><td class="pos">Điểm gốc + stake</td></tr>
+        <tr><td>Nửa đúng (hoà)</td><td style="color:var(--orange)">Điểm gốc/2 + stake/2</td></tr>
+        <tr><td>Nửa sai (kèo)</td><td style="color:var(--orange)">Điểm gốc/2 − stake/2</td></tr>
+        <tr><td>Sai</td><td class="neg">−stake</td></tr>
+        <tr><td>Tần suất</td><td>1 lần / ngày (6pm-6pm GMT+7)</td></tr>
+        <tr><td>Điểm ≤ 0</td><td>Không thể stake</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:8px" class="txt-muted">VD: Bạn có 20 điểm → stake tối đa 4. Đoán đúng trận R32 → +2 gốc +4 stake = <b>+6</b>. Đoán sai → <b>−4</b>.</p>
   </div>
 
   <div class="section-title">🎖 Phân nhóm thành viên</div>
