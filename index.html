@@ -2209,25 +2209,18 @@ function renderAdmin() {
     return;
   }
   const pending = S.matches.filter(m=>m.result==null);
-  let h = `<div class="section-title">➕ Thêm trận</div>
-  <div class="card">
-    <div class="grid-2">
-      <div><label>Số trận</label><input type="number" id="a-no" min="1" value="${S.matches.length+1}"></div>
-      <div><label>Giai đoạn</label><select id="a-stg">
-        <option value="group">Vòng Bảng</option><option value="r32">1/16</option>
-        <option value="r16">1/8</option><option value="qf">Tứ kết</option>
-        <option value="sf">Bán kết</option><option value="final">Chung kết</option>
-      </select></div>
-    </div>
-    <div class="grid-2">
-      <div><label>Ngày</label><input type="date" id="a-date"></div>
-      <div><label>Giờ (GMT+7)</label><input type="time" id="a-time" value="02:00"></div>
-    </div>
-    <label>Đội 1</label><input type="text" id="a-t1" placeholder="Germany">
-    <label>Đội 2</label><input type="text" id="a-t2" placeholder="Japan">
-    <label>Chỉ số cân bằng (âm = đội 1 mạnh hơn)</label><input type="number" id="a-hc" step="0.25" value="0">
-    <button class="btn btn-primary" style="width:100%" onclick="addMatch()">➕ Thêm</button>
-  </div>
+  const upcoming = S.matches.filter(m=>m.result==null);
+  let h = `<div class="section-title">⚖️ Cập nhật Handicap (${upcoming.length} trận chưa có KQ)</div><div class="card">`;
+  if (!upcoming.length) h += `<div class="tc txt-muted" style="padding:14px">Tất cả đã có KQ</div>`;
+  else upcoming.forEach(m=>{
+    h += `<div style="padding:8px 0;border-bottom:1px solid var(--border-2);display:flex;align-items:center;gap:8px">
+      <span style="min-width:28px;color:var(--muted);font-size:.75rem;font-weight:600">#${m.no}</span>
+      <span style="flex:1;font-size:.8rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.t1} vs ${m.t2}</span>
+      <input type="number" step="0.25" value="${m.handicap}" style="width:70px;padding:6px 8px;font-size:.8rem;text-align:center" id="hc-${m.id}">
+      <button class="btn btn-primary btn-sm" onclick="setHandicap('${m.id}')">✓</button>
+    </div>`;
+  });
+  h += `</div>
 
   <div class="section-title">🏁 Nhập kết quả (${pending.length})</div><div class="card">`;
   if (!pending.length) h += `<div class="tc txt-muted" style="padding:14px">Tất cả đã có KQ 🎉</div>`;
@@ -2267,18 +2260,13 @@ function renderAdmin() {
   document.getElementById('admin-content').innerHTML = h;
 }
 
-async function addMatch() {
-  const no = parseInt(document.getElementById('a-no').value);
-  const stage = document.getElementById('a-stg').value;
-  const date = document.getElementById('a-date').value;
-  const time = document.getElementById('a-time').value;
-  const t1 = document.getElementById('a-t1').value.trim();
-  const t2 = document.getElementById('a-t2').value.trim();
-  const hc = parseFloat(document.getElementById('a-hc').value)||0;
-  if (!no||!t1||!t2) { toast('⚠️ Đầy đủ!'); return; }
-  if (S.matches.find(m=>m.no===no)) { toast('⚠️ Trùng số!'); return; }
-  const r = await api({action:'addMatch', adminPwd:ADMIN_PWD, no, stage, date, time, t1, t2, handicap:hc});
-  if (r?.ok) { toast(`✅ #${no}`); refresh(); }
+async function setHandicap(matchId) {
+  const el = document.getElementById('hc-' + matchId);
+  if (!el) return;
+  const hc = parseFloat(el.value) || 0;
+  const r = await api({action:'setHandicap', adminPwd:ADMIN_PWD, matchId, handicap:hc});
+  if (r?.ok) { toast(`✅ Handicap = ${hc}`); refresh(); }
+  else toast(r?.error || 'Lỗi');
 }
 async function setRes(id,r){const x=await api({action:'setResult',adminPwd:ADMIN_PWD,matchId:id,result:r});if(x?.ok){toast('✅');refresh()}}
 function calcHcResult(s1, s2, hc) {
