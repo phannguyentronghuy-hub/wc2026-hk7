@@ -540,6 +540,7 @@ async function refresh() {
   if (d) {
     d.stakes = d.stakes || {};
     S = d;
+    _effCache = {};
     if (ME) { const p = S.players.find(x=>x.id===ME.id); if (p) ME = {...p}; localStorage.setItem(LS.me,JSON.stringify(ME)); }
     updateUserAvatar();
     renderCurrent();
@@ -642,9 +643,9 @@ function playerStats(pid) {
     if (m.result==null) return;
     played++;
     const w = STAGE_WEIGHT[m.stage]||1;
-    const stake = S.stakes[key] || 0;
-    maxScore += stake ? w + stake : w;
-    const s = calcScore(pick, m.result, m.stage, stake);
+    const es = effStake(pid, m.id);
+    maxScore += es ? w + es : w;
+    const s = calcScore(pick, m.result, m.stage, es);
     score += s;
     if (s>=w) fullWin++; else if (s>0) halfWin++; else miss++;
   });
@@ -967,7 +968,7 @@ function matchCardHtml(m) {
   const canPick = !!ME && !locked;
   let b1='pick-btn', b2='pick-btn', resTag='';
   const myKey = ME ? `${m.id}_${ME.id}` : '';
-  const myStake = ME ? (S.stakes[myKey] || 0) : 0;
+  const myStake = ME ? effStake(ME.id, m.id) : 0;
   if (myPick) {
     if (myPick===1) b1+=' active'; else b2+=' active';
     if (hasResult) {
@@ -1074,15 +1075,31 @@ function ddUsedOnDate(pid, matchDate, matchTime, excludeMatchId) {
   });
 }
 
-function getPlayerTotal(pid) {
-  let total = 0;
-  S.matches.forEach(m => {
-    if (m.result == null) return;
-    const pick = S.predictions[`${m.id}_${pid}`];
-    if (!pick) return;
-    total += calcScore(pick, m.result, m.stage, S.stakes[`${m.id}_${pid}`] || 0);
+let _effCache = {};
+function effStake(pid, matchId) {
+  if (!_effCache[pid]) _effCache[pid] = playerEffectiveStakes(pid);
+  return _effCache[pid][matchId] || 0;
+}
+function playerEffectiveStakes(pid) {
+  const scored = S.matches
+    .filter(m => m.result != null && S.predictions[`${m.id}_${pid}`])
+    .sort((a, b) => (matchStartMs(a)||0) - (matchStartMs(b)||0));
+  let runningTotal = 0;
+  const eff = {};
+  scored.forEach(m => {
+    const committed = S.stakes[`${m.id}_${pid}`] || 0;
+    let es = 0;
+    if (committed > 0 && runningTotal > 0) {
+      es = Math.min(committed, Math.max(1, Math.floor(runningTotal * 0.2)));
+    }
+    eff[m.id] = es;
+    runningTotal += calcScore(S.predictions[`${m.id}_${pid}`], m.result, m.stage, es);
   });
-  return total;
+  eff._total = runningTotal;
+  return eff;
+}
+function getPlayerTotal(pid) {
+  return playerEffectiveStakes(pid)._total;
 }
 function getMaxStake(pid) {
   const total = getPlayerTotal(pid);
@@ -1147,7 +1164,7 @@ function showMatchDetail(matchId) {
   const myPickHere = ME ? S.predictions[`${m.id}_${ME.id}`] : null;
   const chip = (p,side)=>{
     let cls = side===1?'t1':side===2?'t2':'none';
-    const pStake = S.stakes[`${m.id}_${p.id}`] || 0;
+    const pStake = effStake(p.id, m.id);
     let extra = pStake ? ` ⚡${pStake}` : '';
     if (hasR && side>0) {
       const s = calcScore(side, m.result, m.stage, pStake);
@@ -1524,7 +1541,7 @@ function renderDistributions(stats) {
     scoredMatches.forEach(m => {
       const key = `${m.id}_${s.pl.id}`;
       const pick = S.predictions[key];
-      if (pick) byStage[m.stage] = (byStage[m.stage] || 0) + calcScore(pick, m.result, m.stage, (S.stakes[key]||0));
+      if (pick) byStage[m.stage] = (byStage[m.stage] || 0) + calcScore(pick, m.result, m.stage, effStake(s.pl.id, m.id));
     });
     return { pl: s.pl, byStage, total: Object.values(byStage).reduce((a, b) => a + b, 0) };
   }).sort((a, b) => b.total - a.total);
@@ -1631,7 +1648,7 @@ function renderWLChart() {
       const key = `${m.id}_${pid}`;
       const pick = S.predictions[key];
       if (!pick) return { m, type: 'skip', pts: 0 };
-      const s = calcScore(pick, m.result, m.stage, (S.stakes[key]||0));
+      const s = calcScore(pick, m.result, m.stage, effStake(pid, m.id));
       const type = s > 0 ? (s >= (STAGE_WEIGHT[m.stage]||1) ? 'win' : 'half') : s < 0 ? 'loss' : 'zero';
       return { m, type, pts: s };
     });
@@ -1739,7 +1756,7 @@ function buildProgData() {
       const key = `${m.id}_${p.id}`;
       const pick = S.predictions[key];
       if (pick) {
-        runningScores[p.id] += calcScore(pick, m.result, m.stage, (S.stakes[key]||0));
+        runningScores[p.id] += calcScore(pick, m.result, m.stage, effStake(p.id, m.id));
       }
       cumScores[p.id].push(runningScores[p.id]);
     });
@@ -1875,7 +1892,7 @@ function calcStreaks(pid) {
       const sKey = `${m.id}_${pid}`;
       const pick = S.predictions[sKey];
       const w = STAGE_WEIGHT[m.stage] || 1;
-      const s = calcScore(pick, m.result, m.stage, (S.stakes[sKey]||0));
+      const s = calcScore(pick, m.result, m.stage, effStake(pid, m.id));
       return { m, ms, pick, pts: s, isWin: s >= w, isHalf: s > 0 && s < w, isMiss: s <= 0 };
     })
     .sort((a, b) => a.ms - b.ms);
@@ -2015,7 +2032,7 @@ function renderResults() {
     if (resFilterStage && m.stage !== resFilterStage) return;
     const key = `${m.id}_${pid}`;
     const pick = S.predictions[key];
-    const stake = S.stakes[key] || 0;
+    const stake = effStake(pid, m.id);
     const w = STAGE_WEIGHT[m.stage] || 1;
     const hasScore = m.score1 != null && m.score2 != null;
     const scoreText = hasScore ? `${m.score1} - ${m.score2}` : '';
