@@ -968,13 +968,14 @@ function matchCardHtml(m) {
   const canPick = !!ME && !locked;
   let b1='pick-btn', b2='pick-btn', resTag='';
   const myKey = ME ? `${m.id}_${ME.id}` : '';
-  const myStake = ME ? effStake(ME.id, m.id) : 0;
+  const myCommitted = ME ? (S.stakes[myKey] || 0) : 0;
+  const myEffStake = ME ? effStake(ME.id, m.id) : 0;
   if (myPick) {
     if (myPick===1) b1+=' active'; else b2+=' active';
     if (hasResult) {
-      const s = calcScore(myPick, m.result, m.stage, myStake);
+      const s = calcScore(myPick, m.result, m.stage, myEffStake);
       const w = STAGE_WEIGHT[m.stage]||1;
-      const stakeLabel = myStake ? ` ⚡${myStake}` : '';
+      const stakeLabel = myEffStake ? ` ⚡${myEffStake}` : '';
       const [cls,txt] = s>=w?['win',`✓ +${s} ĐIỂM${stakeLabel}`]:s>0?['half',`½ +${s} ĐIỂM${stakeLabel}`]:s<0?['lose',`✗ ${s} ĐIỂM${stakeLabel}`]:['lose',`✗ 0 ĐIỂM${stakeLabel}`];
       resTag = `<div class="tc"><span class="result-tag ${cls}">${txt}</span></div>`;
       const rcls = s>=w?'correct':s>0?'half-correct':'wrong';
@@ -1017,10 +1018,10 @@ function matchCardHtml(m) {
     </div>
     ${(()=>{
       if (!myPick || !ME) return '';
-      if (myStake && !canPick) return `<div class="tc" style="margin-top:6px"><span class="dd-badge">⚡ Stake ${myStake}</span></div>`;
+      if (myCommitted && !canPick) return `<div class="tc" style="margin-top:6px"><span class="dd-badge">⚡ Stake ${myCommitted}</span></div>`;
       if (!canPick) return '';
       const usedOn = ddUsedOnDate(ME.id, m.date, m.time, m.id);
-      if (myStake) return `<div class="tc" style="margin-top:6px"><button class="dd-btn dd-active" onclick="removeStake('${m.id}')">⚡ Stake ${myStake} · Bỏ</button></div>`;
+      if (myCommitted) return `<div class="tc" style="margin-top:6px"><button class="dd-btn dd-active" onclick="removeStake('${m.id}')">⚡ Stake ${myCommitted} · Bỏ</button></div>`;
       const maxStake = getMaxStake(ME.id);
       if (maxStake < 1) return `<div class="tc" style="margin-top:6px"><button class="dd-btn" disabled style="opacity:.4;cursor:not-allowed">⚡ Không đủ điểm để stake</button></div>`;
       if (usedOn) return `<div class="tc" style="margin-top:6px"><button class="dd-btn" disabled style="opacity:.4;cursor:not-allowed">⚡ Đã stake trận #${usedOn.no||'?'} hôm nay</button></div>`;
@@ -1164,12 +1165,13 @@ function showMatchDetail(matchId) {
   const myPickHere = ME ? S.predictions[`${m.id}_${ME.id}`] : null;
   const chip = (p,side)=>{
     let cls = side===1?'t1':side===2?'t2':'none';
-    const pStake = effStake(p.id, m.id);
-    let extra = pStake ? ` ⚡${pStake}` : '';
+    const pCommitted = S.stakes[`${m.id}_${p.id}`] || 0;
+    const pEff = effStake(p.id, m.id);
+    let extra = pCommitted ? ` ⚡${pCommitted}` : '';
     if (hasR && side>0) {
-      const s = calcScore(side, m.result, m.stage, pStake);
+      const s = calcScore(side, m.result, m.stage, pEff);
       const w = STAGE_WEIGHT[m.stage]||1;
-      extra = (s>=w?' ✓':s>0?' ½':' ✗') + (pStake?` ⚡${pStake}`:'');
+      extra = (s>=w?' ✓':s>0?' ½':' ✗') + (pCommitted?` ⚡${pCommitted}`:'');
     }
     return `<span class="player-chip ${cls}">${avatarHtml(p.short,'xs')}${p.short}${extra}</span>`;
   };
