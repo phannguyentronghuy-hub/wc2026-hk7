@@ -1020,11 +1020,9 @@ function matchCardHtml(m) {
       if (!myPick || !ME) return '';
       if (myCommitted && !canPick) return `<div class="tc" style="margin-top:6px"><span class="dd-badge">⚡ Stake ${myCommitted}</span></div>`;
       if (!canPick) return '';
-      const usedOn = ddUsedOnDate(ME.id, m.date, m.time, m.id);
       if (myCommitted) return `<div class="tc" style="margin-top:6px"><button class="dd-btn dd-active" onclick="removeStake('${m.id}')">⚡ Stake ${myCommitted} · Bỏ</button></div>`;
       const maxStake = getMaxStake(ME.id);
       if (maxStake < 1) return `<div class="tc" style="margin-top:6px"><button class="dd-btn" disabled style="opacity:.4;cursor:not-allowed">⚡ Không đủ điểm để stake</button></div>`;
-      if (usedOn) return `<div class="tc" style="margin-top:6px"><button class="dd-btn" disabled style="opacity:.4;cursor:not-allowed">⚡ Đã stake trận #${usedOn.no||'?'} hôm nay</button></div>`;
       return `<div class="tc" style="margin-top:6px"><button class="dd-btn" onclick="showStakeInput('${m.id}',${maxStake})">⚡ STAKE (max ${maxStake})</button></div>`;
     })()}
     <div class="social-proof">
@@ -1056,24 +1054,6 @@ async function pick(matchId, p) {
   const r = await api({action:'pick', matchId, playerId:ME.id, pick:newPick, pin:MY_PIN});
   if (r?.ok) toast(newPick?`✅ Chọn ${newPick===1?m.t1:m.t2}`:'🗑️ Bỏ');
   else refresh();
-}
-
-function ddDay(dateStr, timeStr) {
-  const [y,mo,d] = dateStr.split('-').map(Number);
-  const h = parseInt((timeStr||'00:00').split(':')[0]) || 0;
-  const dt = new Date(y, mo-1, d);
-  if (h < 18) dt.setDate(dt.getDate() - 1);
-  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
-}
-
-function ddUsedOnDate(pid, matchDate, matchTime, excludeMatchId) {
-  if (!matchDate) return null;
-  const day = ddDay(matchDate, matchTime);
-  return S.matches.find(m => {
-    if (m.id === excludeMatchId) return false;
-    if (!S.stakes[`${m.id}_${pid}`]) return false;
-    return ddDay(m.date, m.time) === day;
-  });
 }
 
 let _effCache = {};
@@ -1124,8 +1104,6 @@ async function submitStake(matchId, amount) {
     const pin = prompt('Nhập PIN của bạn:'); if (!pin) return;
     MY_PIN = pin; localStorage.setItem(LS.pin, pin);
   }
-  const usedOn = ddUsedOnDate(ME.id, m.date, m.time, matchId);
-  if (usedOn) { toast(`⚡ Đã stake trận #${usedOn.no||'?'} ngày này`); return; }
   const maxStake = getMaxStake(ME.id);
   if (amount < 1 || amount > maxStake) { toast(`⚠️ Stake phải từ 1 đến ${maxStake}`); return; }
   S.stakes[key] = amount;
@@ -2139,7 +2117,7 @@ function renderRules() {
 
   <div class="rule-block" style="border-color:rgba(255,193,7,.35);background:linear-gradient(135deg,rgba(255,193,7,.08),var(--surface))">
     <h3 style="color:var(--gold)">⚡ Stake (Đặt cược điểm)</h3>
-    <p>Mỗi ngày (6pm → 6pm hôm sau, GMT+7), bạn có thể <b>stake</b> 1 trận:</p>
+    <p>Bạn có thể <b>stake</b> bất kỳ trận nào chưa khoá:</p>
     <table>
       <thead><tr><th>Mục</th><th>Chi tiết</th></tr></thead>
       <tbody>
