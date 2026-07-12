@@ -144,6 +144,45 @@
   .again:hover{transform:translateY(-2px);box-shadow:0 8px 0 #1e5a25}
   .again:active{transform:translateY(3px);box-shadow:0 3px 0 #1e5a25}
 
+  /* Speaker + mute */
+  .top-controls{position:absolute;top:14px;right:16px;display:flex;gap:6px;z-index:5}
+  .icon-btn{
+    width:40px;height:40px;border-radius:50%;
+    background:#fff;border:2px solid #ffb27a;
+    font-size:1.15rem;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 3px 0 #ffb27a;
+    transition:transform .12s;
+  }
+  .icon-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #ffb27a}
+  .repeat-btn{
+    display:inline-flex;align-items:center;gap:6px;
+    margin:12px auto 0;
+    background:#fffaf0;border:2px solid #ffb27a;
+    padding:8px 16px;border-radius:99px;
+    font-family:'Baloo 2';font-size:.95rem;font-weight:700;color:#ff4d6d;
+    cursor:pointer;box-shadow:0 3px 0 #ffb27a;
+  }
+  .repeat-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #ffb27a}
+  .speaking .emoji{animation:bounce .6s ease-in-out infinite}
+
+  /* Start screen */
+  .start{text-align:center;padding:14px 6px 6px}
+  .start .big{font-size:6rem;line-height:1;animation:bounce 1.4s infinite;display:block}
+  .start h2{font-family:'Baloo 2';font-size:1.6rem;color:#ff4d6d;margin:10px 0 6px;text-shadow:2px 2px 0 #ffde59}
+  .start p{color:#6b4a2b;font-size:1rem;margin-bottom:16px;padding:0 6px}
+  .start-btn{
+    background:linear-gradient(135deg,#3fb950,#2d8a3c);
+    color:#fff;border:none;
+    font-family:'Baloo 2';font-size:1.25rem;font-weight:800;
+    padding:14px 34px;border-radius:99px;cursor:pointer;
+    box-shadow:0 6px 0 #1e5a25;
+    display:inline-flex;align-items:center;gap:8px;
+    transition:transform .15s, box-shadow .15s;
+  }
+  .start-btn:hover{transform:translateY(-2px);box-shadow:0 8px 0 #1e5a25}
+  .start-btn:active{transform:translateY(3px);box-shadow:0 3px 0 #1e5a25}
+
   /* Confetti */
   .confetti{position:fixed;top:-10px;font-size:1.4rem;pointer-events:none;animation:fall linear forwards;z-index:9999}
   @keyframes fall{
@@ -160,10 +199,20 @@
 </head>
 <body>
   <main class="stage" id="stage">
+    <div class="top-controls">
+      <button class="icon-btn" id="muteBtn" title="Sound on/off" aria-label="Sound">🔊</button>
+    </div>
     <h1><span class="flag">🇮🇩</span> Fun Animals of Indonesia! <span class="flag">🇮🇩</span></h1>
     <p class="sub">Can you guess them all?</p>
 
-    <div id="quiz-view">
+    <div id="start-view" class="start">
+      <span class="big">🐯</span>
+      <h2>Ready to Play?</h2>
+      <p>I will read each question out loud. Just listen and tap the answer!</p>
+      <button class="start-btn" onclick="startQuiz()">▶ Start Quiz</button>
+    </div>
+
+    <div id="quiz-view" style="display:none">
       <div class="progress-wrap">
         <div class="progress"><div class="progress-fill" id="pfill"></div></div>
         <div class="qcount" id="qcount">1 / 8</div>
@@ -172,6 +221,7 @@
       <div class="card" id="card">
         <span class="emoji" id="emoji">🐾</span>
         <p class="question" id="question">Loading…</p>
+        <button class="repeat-btn" id="repeatBtn" onclick="speakQuestion()">🔊 Hear it again</button>
         <div class="options" id="options"></div>
         <div class="feedback" id="feedback"></div>
         <button class="next-btn" id="next">Next ➜</button>
@@ -255,6 +305,60 @@
 
   const $ = id => document.getElementById(id);
 
+  /* ---------- Speech ---------- */
+  const synth = window.speechSynthesis;
+  let voice = null;
+  let soundOn = true;
+
+  function pickVoice(){
+    if(!synth) return;
+    const voices = synth.getVoices();
+    if(!voices.length) return;
+    const prefs = [
+      /Google US English/i, /Samantha/i, /Karen/i, /Zira/i,
+      /Google UK English Female/i, /Microsoft Aria/i, /Microsoft Jenny/i,
+      /en[-_]US/i, /en[-_]GB/i, /^en/i
+    ];
+    for(const p of prefs){
+      const v = voices.find(v => p.test(v.name) || p.test(v.lang));
+      if(v){ voice = v; return; }
+    }
+    voice = voices[0];
+  }
+  if(synth){
+    pickVoice();
+    synth.addEventListener("voiceschanged", pickVoice);
+  }
+
+  function speak(text, {rate=0.9, pitch=1.2, onend} = {}){
+    if(!synth || !soundOn){ if(onend) onend(); return; }
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    if(voice) u.voice = voice;
+    u.rate = rate; u.pitch = pitch; u.volume = 1;
+    u.onstart = () => document.getElementById("card")?.classList.add("speaking");
+    u.onend = () => {
+      document.getElementById("card")?.classList.remove("speaking");
+      if(onend) onend();
+    };
+    u.onerror = u.onend;
+    synth.speak(u);
+  }
+
+  function speakQuestion(){
+    const q = QUESTIONS[index];
+    const letters = ["A","B","C","D"];
+    const optsText = q.options.map((t,i) => `${letters[i]}. ${t}.`).join(" ");
+    speak(`${q.q} ... ${optsText}`);
+  }
+
+  function toggleMute(){
+    soundOn = !soundOn;
+    $("muteBtn").textContent = soundOn ? "🔊" : "🔇";
+    if(!soundOn) synth?.cancel();
+    else speakQuestion();
+  }
+
   function render(){
     locked = false;
     const q = QUESTIONS[index];
@@ -278,6 +382,9 @@
     fb.className = "feedback";
     fb.textContent = "";
     $("next").classList.remove("show");
+
+    /* Read the question aloud */
+    setTimeout(speakQuestion, 250);
   }
 
   function choose(i, btn){
@@ -307,6 +414,7 @@
     const cheer = good ? CHEERS[Math.floor(Math.random()*CHEERS.length)] : OOPS[Math.floor(Math.random()*OOPS.length)];
     fb.className = "feedback show " + (good ? "good" : "bad");
     fb.innerHTML = `${good?"✅":"💡"} <strong>${cheer}</strong><span class="fact">${fact}</span>`;
+    speak(`${cheer} ${fact}`, {rate: 0.95});
   }
 
   function next(){
@@ -351,12 +459,25 @@
     $("resultTitle").textContent = title;
     $("resultMsg").textContent = msg;
     $("resultEmoji").textContent = emoji;
+    speak(`${title} You got ${score} out of ${total}. ${msg}`, {rate: 0.95});
   }
 
   function restart(){
     index = 0; score = 0;
     $("result-view").style.display = "none";
     $("quiz-view").style.display = "block";
+    render();
+  }
+
+  function startQuiz(){
+    $("start-view").style.display = "none";
+    $("quiz-view").style.display = "block";
+    /* iOS/Safari need a "warm-up" utterance on user gesture */
+    if(synth){
+      const warm = new SpeechSynthesisUtterance("");
+      warm.volume = 0;
+      synth.speak(warm);
+    }
     render();
   }
 
@@ -378,7 +499,7 @@
   }
 
   $("next").addEventListener("click", next);
-  render();
+  $("muteBtn").addEventListener("click", toggleMute);
 </script>
 </body>
 </html>
