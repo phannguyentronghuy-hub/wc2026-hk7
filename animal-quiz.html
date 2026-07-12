@@ -183,6 +183,28 @@
   .start-btn:hover{transform:translateY(-2px);box-shadow:0 8px 0 #1e5a25}
   .start-btn:active{transform:translateY(3px);box-shadow:0 3px 0 #1e5a25}
 
+  /* Country picker */
+  .country-picker{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
+  .country-btn{
+    border:none;cursor:pointer;
+    padding:18px 10px 16px;border-radius:22px;
+    display:flex;flex-direction:column;align-items:center;gap:4px;
+    font-family:'Baloo 2';
+    transition:transform .15s, box-shadow .15s;
+    color:#fff;
+  }
+  .country-btn.indo{background:linear-gradient(135deg,#ef4444,#b91c1c);box-shadow:0 6px 0 #7a1010}
+  .country-btn.aus{background:linear-gradient(135deg,#1e88e5,#0d47a1);box-shadow:0 6px 0 #082a5c}
+  .country-btn:hover{transform:translateY(-3px)}
+  .country-btn.indo:hover{box-shadow:0 9px 0 #7a1010}
+  .country-btn.aus:hover{box-shadow:0 9px 0 #082a5c}
+  .country-btn:active{transform:translateY(3px)}
+  .country-btn.indo:active{box-shadow:0 3px 0 #7a1010}
+  .country-btn.aus:active{box-shadow:0 3px 0 #082a5c}
+  .flag-big{font-size:2.8rem;line-height:1;filter:drop-shadow(0 4px 8px rgba(0,0,0,.25))}
+  .country-name{font-weight:800;font-size:1.15rem;margin-top:4px;letter-spacing:.3px}
+  .country-sub{font-size:.85rem;opacity:.9;font-weight:600}
+
   /* Confetti */
   .confetti{position:fixed;top:-10px;font-size:1.4rem;pointer-events:none;animation:fall linear forwards;z-index:9999}
   @keyframes fall{
@@ -202,14 +224,25 @@
     <div class="top-controls">
       <button class="icon-btn" id="muteBtn" title="Sound on/off" aria-label="Sound">🔊</button>
     </div>
-    <h1><span class="flag">🇮🇩</span> Indonesia Animal Expert Quiz <span class="flag">🇮🇩</span></h1>
-    <p class="sub">Only real animal experts can guess these! 🧠✨</p>
+    <h1 id="mainTitle">Animal Expert Quiz</h1>
+    <p class="sub" id="mainSub">Only real animal experts can guess these! 🧠✨</p>
 
     <div id="start-view" class="start">
       <span class="big">🐯</span>
-      <h2>Ready to Play?</h2>
-      <p>I will read each question out loud. Just listen and tap the answer!</p>
-      <button class="start-btn" onclick="startQuiz()">▶ Start Quiz</button>
+      <h2>Pick a Country!</h2>
+      <p>I will read every question out loud. Just listen and tap the answer!</p>
+      <div class="country-picker">
+        <button class="country-btn indo" onclick="startQuiz('indo')">
+          <span class="flag-big">🇮🇩</span>
+          <span class="country-name">Indonesia</span>
+          <span class="country-sub">10 questions</span>
+        </button>
+        <button class="country-btn aus" onclick="startQuiz('aus')">
+          <span class="flag-big">🇦🇺</span>
+          <span class="country-name">Australia</span>
+          <span class="country-sub">10 questions</span>
+        </button>
+      </div>
     </div>
 
     <div id="quiz-view" style="display:none">
@@ -239,7 +272,7 @@
   </main>
 
 <script>
-  const QUESTIONS = [
+  const QUESTIONS_INDO = [
     {
       emoji:"🐃",
       q:"Which tiny wild buffalo, only as tall as your knee, hides in the forests of Sulawesi?",
@@ -295,8 +328,97 @@
       options:["Cockatoo","Bali Myna","White Dove","Snowy Owl"],
       answer:1,
       fact:"The Bali Myna is Bali's official bird — and one of the rarest birds in the world!"
+    },
+    {
+      emoji:"🐵",
+      q:"Which cute-looking Indonesian primate has a POISONOUS bite hiding under its elbow?",
+      options:["Slow Loris","Tarsier","Bushbaby","Marmoset"],
+      answer:0,
+      fact:"The Slow Loris licks poison from its elbow before biting — the only venomous primate on Earth!"
+    },
+    {
+      emoji:"🐟",
+      q:"Which 'living fossil' fish was found alive near Sulawesi, after everyone thought it went extinct 65 million years ago?",
+      options:["Piranha","Coelacanth","Sturgeon","Anglerfish"],
+      answer:1,
+      fact:"The Coelacanth's fins move like little legs — it's a cousin of the very first land animals!"
     }
   ];
+
+  const QUESTIONS_AUS = [
+    {
+      emoji:"🐜",
+      q:"Which striped marsupial slurps up 20,000 termites a day with its long sticky tongue?",
+      options:["Anteater","Numbat","Aardvark","Pangolin"],
+      answer:1,
+      fact:"The Numbat is one of the only marsupials that eats during the daytime!"
+    },
+    {
+      emoji:"😊",
+      q:"Which small wallaby is called 'the world's happiest animal' because of its cute smile?",
+      options:["Bilby","Pademelon","Quokka","Wallaroo"],
+      answer:2,
+      fact:"Quokkas live on Rottnest Island — their name means 'rat nest' in Dutch!"
+    },
+    {
+      emoji:"🌵",
+      q:"Which spiky Australian lizard drinks water through its FEET?",
+      options:["Frilled Lizard","Bearded Dragon","Blue-Tongue","Thorny Devil"],
+      answer:3,
+      fact:"Raindrops travel up its skin like tiny straws — straight into its mouth!"
+    },
+    {
+      emoji:"🦆",
+      q:"Which weird Aussie animal has a duck's bill, lays eggs, AND has venom in its back feet?",
+      options:["Otter","Platypus","Beaver","Echidna"],
+      answer:1,
+      fact:"The Platypus is one of only 5 mammals in the whole world that lays eggs!"
+    },
+    {
+      emoji:"🟫",
+      q:"Which chunky Australian animal makes CUBE-SHAPED poops?",
+      options:["Koala","Wombat","Kangaroo","Tasmanian Devil"],
+      answer:1,
+      fact:"Wombats make up to 100 poop cubes a night to mark their territory!"
+    },
+    {
+      emoji:"🎤",
+      q:"Which sneaky Aussie bird can copy chainsaws, camera clicks, and other animals' voices?",
+      options:["Kookaburra","Magpie","Lyrebird","Cockatoo"],
+      answer:2,
+      fact:"A Lyrebird can imitate more than 20 different sounds — perfectly!"
+    },
+    {
+      emoji:"🐰",
+      q:"Which long-eared desert marsupial does Australia celebrate at Easter instead of a bunny?",
+      options:["Bilby","Bandicoot","Quoll","Potoroo"],
+      answer:0,
+      fact:"Bilbies dig long spiral burrows to stay cool in the hot outback!"
+    },
+    {
+      emoji:"🦖",
+      q:"Which giant blue-headed rainforest bird can jump SIX feet high and kick like a kung fu master?",
+      options:["Emu","Ostrich","Cassowary","Rhea"],
+      answer:2,
+      fact:"The Cassowary is often called 'the world's most dangerous bird'!"
+    },
+    {
+      emoji:"🪂",
+      q:"Which pocket-sized marsupial spreads its skin like a parachute to glide between trees?",
+      options:["Flying Fox","Sugar Glider","Colugo","Ringtail Possum"],
+      answer:1,
+      fact:"Sugar Gliders can glide as far as a school bus is long in one jump!"
+    },
+    {
+      emoji:"🦔",
+      q:"Which spiky Aussie animal lays eggs AND has a baby called a 'puggle'?",
+      options:["Hedgehog","Porcupine","Anteater","Echidna"],
+      answer:3,
+      fact:"An Echidna baby is called a 'puggle' — the cutest baby name ever!"
+    }
+  ];
+
+  let QUESTIONS = QUESTIONS_INDO;
 
   const CHEERS = ["Wonderful!","Awesome!","Great job!","You got it!","Super!","Fantastic!","Way to go!","Amazing!"];
   const OOPS = ["Oops! Try to remember this one:","Not this time!","Almost!","Good try!"];
@@ -464,13 +586,23 @@
 
   function restart(){
     index = 0; score = 0;
+    synth?.cancel();
     $("result-view").style.display = "none";
-    $("quiz-view").style.display = "block";
-    render();
+    $("quiz-view").style.display = "none";
+    $("start-view").style.display = "block";
+    $("mainTitle").innerHTML = "Animal Expert Quiz";
+    $("mainSub").textContent = "Only real animal experts can guess these! 🧠✨";
   }
 
-  function startQuiz(){
+  function startQuiz(country){
+    QUESTIONS = country === "aus" ? QUESTIONS_AUS : QUESTIONS_INDO;
+    const flag = country === "aus" ? "🇦🇺" : "🇮🇩";
+    const name = country === "aus" ? "Australia" : "Indonesia";
+    $("mainTitle").innerHTML = `<span class="flag">${flag}</span> ${name} Animal Quiz <span class="flag">${flag}</span>`;
+    $("mainSub").textContent = `10 tricky questions about ${name}'s coolest animals!`;
+    index = 0; score = 0;
     $("start-view").style.display = "none";
+    $("result-view").style.display = "none";
     $("quiz-view").style.display = "block";
     /* iOS/Safari need a "warm-up" utterance on user gesture */
     if(synth){
