@@ -634,7 +634,7 @@ function playerStats(pid) {
   const pl = S.players.find(p=>p.id===pid);
   if (!pl) return null;
   const grp = S.config.groups.find(g=>g.id===pl.groupId) || {id:'?',name:'?',css:'tier-other',rate:0};
-  let bets=0,played=0,score=0,maxScore=0,fullWin=0,halfWin=0,miss=0;
+  let bets=0,played=0,score=0,maxScore=0,fullWin=0,halfWin=0,miss=0,accNum=0,accDen=0;
   S.matches.forEach(m=>{
     const key = `${m.id}_${pid}`;
     const pick = S.predictions[key];
@@ -648,8 +648,16 @@ function playerStats(pid) {
     const s = calcScore(pick, m.result, m.stage, es);
     score += s;
     if (s>=w) fullWin++; else if (s>0) halfWin++; else miss++;
+    if (m.result !== 0) {
+      accDen++;
+      let base;
+      if (pick===1) { base = m.result>=0.5 ? w : m.result===-0.5 ? w*0.5 : 0; }
+      else { base = m.result<=-0.5 ? w : m.result===0.5 ? w*0.5 : 0; }
+      if (base===w) accNum+=1;
+      else if (Math.abs(m.result)===0.5 && base===w*0.5) accNum+=0.5;
+    }
   });
-  const accuracy = maxScore > 0 ? score / maxScore : 0;
+  const accuracy = accDen > 0 ? accNum / accDen : 0;
   return { pl, grp, bets, played, score, maxScore, fullWin, halfWin, miss, accuracy };
 }
 function allStats() {
@@ -1530,7 +1538,8 @@ function renderDistributions(stats) {
   const sbRows = playerStageScores.length + 1;
   const SBH = SBPT + sbRows * (SBH_ROW + SBG) + SBPB;
   const sbBarArea = SBW - SBPL - SBPR;
-  const sbScale = totalMax2 > 0 ? sbBarArea / totalMax2 : 1;
+  const maxVal = Math.max(totalMax2, ...playerStageScores.map(ps => ps.total));
+  const sbScale = maxVal > 0 ? sbBarArea / maxVal : 1;
 
   let sbSvg = '';
   // Header: max bar
@@ -2112,7 +2121,7 @@ function renderRules() {
         <tr><td>1/8 → Chung kết</td><td class="tc" style="color:var(--green)">+3</td><td class="tc" style="color:var(--orange)">+1.5</td><td class="tc" style="color:var(--muted)">0</td></tr>
       </tbody>
     </table>
-    <p style="margin-top:10px"><b>Tỷ lệ chuẩn xác</b> = Điểm đạt được / Điểm tối đa có thể × 100%. Người dẫn đầu là người có % cao nhất hoặc điểm cao nhất.</p>
+    <p style="margin-top:10px"><b>Tỷ lệ chuẩn xác</b> = Số trận thắng / Tổng số trận (không tính hòa). Thắng nửa: người thắng +1, người thua +0.5. Hòa: bỏ ra khỏi cả tử số và mẫu số.</p>
   </div>
 
   <div class="rule-block" style="border-color:rgba(255,193,7,.35);background:linear-gradient(135deg,rgba(255,193,7,.08),var(--surface))">
